@@ -14,6 +14,7 @@ module Network.Wai.Middleware.Prometheus
   , instrumentIO
   , observeSeconds
   , metricsApp
+  , respondWithCompressedMetrics
   ) where
 
 import qualified Data.Default as Default
@@ -27,6 +28,8 @@ import qualified Network.Wai as Wai
 import qualified Network.Wai.Internal as Wai (Response(ResponseRaw))
 import qualified Prometheus as Prom
 import System.Clock (Clock(..), TimeSpec, diffTimeSpec, getTime, toNanoSecs)
+import Codec.Compression.Zstd (compress)
+import Data.String.Conversions (convertString)
 
 
 -- | Settings that control the behavior of the Prometheus middleware.
@@ -184,5 +187,13 @@ respondWithMetrics :: (Wai.Response -> IO Wai.ResponseReceived)
 respondWithMetrics respond = do
     metrics <- Prom.exportMetricsAsText
     respond $ Wai.responseLBS HTTP.status200 headers metrics
+    where
+        headers = [(HTTP.hContentType, "text/plain; version=0.0.4")]
+
+respondWithCompressedMetrics :: Int -> (Wai.Response -> IO Wai.ResponseReceived)
+                   -> IO Wai.ResponseReceived
+respondWithCompressedMetrics compressionLevel respond = do
+    metrics <- Prom.exportMetricsAsText
+    respond $ Wai.responseLBS HTTP.status200 headers (convertString $ compress compressionLevel (convertString metrics))
     where
         headers = [(HTTP.hContentType, "text/plain; version=0.0.4")]
